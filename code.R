@@ -1,6 +1,3 @@
-# NBAPassingNetworkR
-Code to visualize made/received passes in R from NBA games
-
 library(RJSONIO)
 library(rjson)
 library(igraph)
@@ -241,7 +238,7 @@ player.num2 = matrix(c(1:length(yas2)))
 #collecting and manipulating and into a workable dataframe
 #does it with made pass data
 
-fucking.finally1 = function(x)
+finally1 = function(x)
 {
   dat = yas1[[x]]$resultSets[[1]]$rowSet
   return(data.frame(t(matrix(unlist(dat),nrow=21)),stringsAsFactors = FALSE))
@@ -253,7 +250,7 @@ fucking.finally1 = function(x)
 #collecting and manipulating and into a workable dataframe
 #does it with rec pass data
 
-fucking.finally2 = function(x)
+finally2 = function(x)
 {
   dat = yas2[[x]]$resultSets[[2]]$rowSet
   return(data.frame(t(matrix(unlist(dat),nrow=21)),stringsAsFactors = FALSE))
@@ -261,14 +258,14 @@ fucking.finally2 = function(x)
 
 ###################
 
-made = apply(X = player.num1, FUN = fucking.finally1, MARGIN = 1)
+made = apply(X = player.num1, FUN = finally1, MARGIN = 1)
 made = do.call("rbind",made)
 colnames(made) = yas1[[1]]$resultSets[[1]]$headers
 colnames(made)[8] = paste("OTHER_PLAYER")
 
 ##################
 
-recv = apply(X = player.num2, FUN = fucking.finally2, MARGIN = 1)
+recv = apply(X = player.num2, FUN = finally2, MARGIN = 1)
 recv = do.call("rbind",recv)
 colnames(recv) = yas2[[1]]$resultSets[[2]]$headers
 colnames(recv)[8] = paste("OTHER_PLAYER")
