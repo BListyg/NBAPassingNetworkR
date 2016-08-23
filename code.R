@@ -308,6 +308,8 @@ network.nodes = as.character(network.nodes$value)
   
 net <- graph.data.frame(d=network.links, vertices=network.nodes, directed=T) 
 E(net)$width = (network.links$X4/2)
+
+#this scalar constant (40) makes it look more visually appealling 
 V(net)$size = as.numeric(node.data[,2])*40
 
 l = layout_in_circle(net)
