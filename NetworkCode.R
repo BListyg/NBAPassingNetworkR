@@ -164,7 +164,8 @@ getPLAYERdata = function(season,season.type){
 #Running this function for each season and creating single dataframe
 playoff.data.P = rbind(getPLAYERdata(season = "2013-14",season.type = "Playoffs"),
 getPLAYERdata(season = "2014-15",season.type = "Playoffs"),
-getPLAYERdata(season = "2015-16",season.type = "Playoffs"))
+getPLAYERdata(season = "2015-16",season.type = "Playoffs"),
+getPLAYERdata(season = "2016-17",season.type = "Playoffs"))
 
 #Running this function for each season and creating single dataframe
 reg.data.P = rbind(getPLAYERdata(season = "2013-14",season.type = "Regular+Season"),
@@ -283,62 +284,138 @@ reg.data.PASS = rbind(getPASSdata(season.id = "22013", season = "2013-14", seaso
 
 ###
 
+reg.data.PASS$TEAM_ID_GAME_DATE = paste(reg.data.PASS$TEAM_ID, reg.data.PASS$gamedate, sep="")
+
+###
+
 colnames(playoff.data.PASS) = c("PLAYER_ID","PLAYER_NAME_LAST_FIRST","TEAM_NAME","TEAM_ID","TEAM_ABBREVIATION","MADE_REC","G","PASS_PLAYER","PASS_TEAMMATE_PLAYER_ID","FREQUENCY","PASS","AST","FGM","FGA","FG_PCT","FG2M","FG2A","FG2_PCT","FG3M","FG3A","FG3_PCT","gamedate", "season.type", "season", "TEAM_ID_GAME_DATE")
 colnames(reg.data.PASS) = c("PLAYER_ID","PLAYER_NAME_LAST_FIRST","TEAM_NAME","TEAM_ID","TEAM_ABBREVIATION","MADE_REC","G","PASS_PLAYER","PASS_TEAMMATE_PLAYER_ID","FREQUENCY","PASS","AST","FGM","FGA","FG_PCT","FG2M","FG2A","FG2_PCT","FG3M","FG3A","FG3_PCT","gamedate", "season.type", "season", "TEAM_ID_GAME_DATE")
 
 ###
 
-###Calculate network stuff below
-#Code below is not complete, just a copy over from previous version
+data.T = rbind(playoff.data.T, reg.data.T)
+data.T$TEAM_ID_GAME_DATE = paste(data.T$TEAM_ID, data.T$GAME_DATE, sep="")
+data.T = merge(x = data.T, y = network.data.T, by = "TEAM_ID_GAME_DATE")
 
 ###
 
-nbanetPO = function(x)
+pass.DATA = rbind(reg.data.PASS, playoff.data.PASS)
+
+###
+
+nbanet = function(x){
+net = function(x)
 {
   gamedate = str_sub(x,-14)
   teamid = str_sub(x,1,(length(x)-16))
-  teamsubset = passperfPO[which(passperfPO$TEAM_ID ==  paste(teamid) & passperfPO$gamedate == paste(gamedate)),]
+  teamsubset = pass.DATA[which(pass.DATA$TEAM_ID ==  paste(teamid) & pass.DATA$gamedate == paste(gamedate)),]
   teamsubset$PLAYER_NAME_LAST_FIRST = gsub(teamsubset$PLAYER_NAME_LAST_FIRST, pattern = "-",replacement = "")
   teamsubset$PASS_PLAYER = gsub(teamsubset$PASS_PLAYER,pattern = "-",replacement = "")
-  points = nbadata[which(nbadata$TEAM_ID == paste(teamid) & nbadata$GAME_DATE == paste(gamedate)),]
-  points = cbind(as.character(points$PLAYER_NAME), points$PTS)
-  points[,1] = gsub(points[,1],pattern = "-",replacement = "")
-  networksubset = cbind(teamsubset$PLAYER_NAME_LAST_FIRST, as.character(teamsubset$PASS_PLAYER), as.character(teamsubset$MADE_REC), teamsubset$PASS)
-  splits1 <- str_split_fixed(networksubset[,1], ", ", 2)
-  splits2 <- str_split_fixed(networksubset[,2], ", ", 2)
-  networksubset[,1]=paste(splits1[,2],splits1[,1],sep = " ")
-  networksubset[,2]=paste(splits2[,2],splits2[,1],sep = " ")
-  networksubset = networksubset[!duplicated(networksubset[,c(1,2,3)]),]
-  
-  networksubset = gsub(" Nene" ,"Nene", networksubset)
-  
-  net <- graph.data.frame(d=networksubset, vertices=points[,1], directed=T) 
-  
-  E(net)$width = (as.numeric(networksubset[,4])/1.5)
-  
-  #this scalar constant (40) makes it look more visually appealling 
-  V(net)$size = as.numeric(points[,2])*1.25
-  
-  l = layout_in_circle(net)
-  return(net)
-  #return(plot.igraph(net, layout = l, edge.arrow.size = 0.20, vertex.label.cex =1.2))
+  networksubset = data.frame(cbind(as.character(teamsubset$PLAYER_NAME_LAST_FIRST), as.character(teamsubset$PASS_PLAYER), as.character(teamsubset$MADE_REC), as.character(teamsubset$PASS)), row.names = NULL)
+  made.1 = networksubset[which(networksubset$X3 == "made"),]
+  made = made.1[order(made.1$X1),]
+  made[] = lapply(made, as.character)
+  made[] = lapply(made, function(x){gsub(" ","",x)})
+  made = paste(made[,1], made[,2], made[,4], sep = " ")
+  rec.1 = networksubset[which(networksubset$X3 == "received"),]
+  rec.1 = rec.1[,c(2,1,3,4)]
+  rec.1 = rec.1[order(rec.1$X2),]
+  rec.1[] = lapply(rec.1, as.character)
+  rec.1[] = lapply(rec.1, function(x){gsub(" ","",x)})
+  rec = paste(rec.1[,1], rec.1[,2], rec.1[,4], sep = " ")
+  if(nrow(made.1) > nrow(rec.1))
+  {return(graph_from_data_frame(made.1[,-3], directed = T))}
+  else if(nrow(rec.1) > nrow(made.1)){return(graph_from_data_frame(rec.1[,-3], directed = T))}
+  else if(nrow(made.1) == nrow(rec.1)){return(graph_from_data_frame(made.1[,-3], directed = T))}
+}
+stats = cbind(x,centralization.betweenness(net(x))$centralization, 
+                     centralization.closeness(net(x))$centralization,
+                     centralization.evcent(net(x))$centralization,
+                     centralization.degree(net(x))$centralization)
+
+return(stats)
 }
 
-#Function to return degree, between, closeness, and eigenvalue centrality measures for every graph object nbanet makes. Also returns density as well.
-netoutputPO = function(x)
+###
+
+x = matrix(unique(pass.DATA$TEAM_ID_GAME_DATE))
+network.data.T = data.frame(t(apply(X = matrix(x), MARGIN = 1, FUN = nbanet)))
+colnames(network.data.T) = c("TEAM_ID_GAME_DATE","between", "close", "eigen", "degree")
+network.data.T[,-1] = lapply(X = network.data.T[,-1], function(x){as.numeric(as.character(x))})
+
+###
+
+data.P = rbind(reg.data.P, playoff.data.P)
+
+data.P$z_NBAeff <- ave(data.P$NBAeff, data.P$PLAYER_NAME, FUN=scale)
+
+data.P$z_PIE <- ave(data.P$PIE, data.P$PLAYER_NAME, FUN=scale)
+
+###
+
+bestplayer = function(x,y){
+  
+  df1 = unique(merge(data.frame(
+    Var1 = as.character(data.P$PLAYER_NAME[which(data.P$SEASON_ID == paste(x) & data.P$NBAeff_RANK == '1')]), TEAM_NAME = as.character(data.P$TEAM_NAME[which(data.P$SEASON_ID == paste(x) & data.P$NBAeff_RANK == '1')])
+  ), data.frame(melt(table((as.character(data.P$PLAYER_NAME[which(data.P$SEASON_ID == paste(x) & data.P$NBAeff_RANK == '1')]))))), by = "Var1"))
+  df1 = df1[with(df1, order(df1[,2], df1[,3])), ]
+  
+  df2 = unique(merge(data.frame(
+    Var1 = as.character(data.P$PLAYER_NAME[which(data.P$SEASON_ID == paste(x) & data.P$PIE_RANK == '1')]), TEAM_NAME = as.character(data.P$TEAM_NAME[which(data.P$SEASON_ID == paste(x) & data.P$PIE_RANK == '1')])
+  ), data.frame(melt(table((as.character(data.P$PLAYER_NAME[which(data.P$SEASON_ID == paste(x) & data.P$PIE_RANK == '1')]))))), by = "Var1"))
+  df2 = df2[with(df2, order(df2[,2], df2[,3])), ]
+  
+  if(y == "NBAeff"){return(df1)}
+  else if(y == "PIE"){return(df2)}
+  
+}
+
+bestplayer.list = list(c("22013", "NBAeff"),
+                       bestplayer("22013", "NBAeff"),
+                       c("22014", "NBAeff"),
+                       bestplayer("22014", "NBAeff"),
+                       c("22015", "NBAeff"),
+                       bestplayer("22015", "NBAeff"),
+                       c("22016", "NBAeff"),
+                       bestplayer("22016", "NBAeff"),
+                       c("22013", "PIE"),
+                       bestplayer("22013", "PIE"),
+                       c("22014", "PIE"),
+                       bestplayer("22014", "PIE"),
+                       c("22015", "PIE"),
+                       bestplayer("22015", "PIE"),
+                       c("22016", "PIE"),
+                       bestplayer("22016", "PIE"),
+                       c("42013", "NBAeff"),
+                       bestplayer("42013", "NBAeff"),
+                       c("42014", "NBAeff"),
+                       bestplayer("42014", "NBAeff"),
+                       c("42015", "NBAeff"),
+                       bestplayer("42015", "NBAeff"),
+                       c("42016", "NBAeff"),
+                       bestplayer("42016", "NBAeff"),
+                       c("42013", "PIE"),
+                       bestplayer("42013", "PIE"),
+                       c("42014", "PIE"),
+                       bestplayer("42014", "PIE"),
+                       c("42015", "PIE"),
+                       bestplayer("42015", "PIE"),
+                       c("42016", "PIE"),
+                       bestplayer("42016", "PIE"))
+
+###
+
+#Random notes, code, and functions below here#
+
+test2 = function(x)
 {
-  y = cbind(centr_degree(nbanetPO(x))$centralization,
-            centr_betw(nbanetPO(x))$centralization,
-            centr_clo(nbanetPO(x))$centralization,
-            centr_eigen(nbanetPO(x))$centralization,
-            edge_density(nbanetPO(x)))
-  y = data.frame(y)
-  colnames(y)[1] = paste("DegCentr")
-  colnames(y)[2] = paste("BetwCentr")
-  colnames(y)[3] = paste("CloCentr")
-  colnames(y)[4] = paste("EigCentr")
-  colnames(y)[5] = paste("Density")
-  return(y)
+  gamedate = str_sub(x,-14)
+  teamid = str_sub(x,1,(length(x)-16))
+  teamsubset = reg.data.PASS[which(reg.data.PASS$TEAM_ID ==  paste(teamid) & reg.data.PASS$gamedate == paste(gamedate)),]
+  teamsubset$PLAYER_NAME_LAST_FIRST = gsub(teamsubset$PLAYER_NAME_LAST_FIRST, pattern = "-",replacement = "")
+  teamsubset$PASS_PLAYER = gsub(teamsubset$PASS_PLAYER,pattern = "-",replacement = "")
+  networksubset = data.frame(cbind(as.character(teamsubset$PLAYER_NAME_LAST_FIRST), as.character(teamsubset$PASS_PLAYER), as.character(teamsubset$MADE_REC), as.character(teamsubset$PASS)), row.names = NULL)
+  return(table(sort(as.character(networksubset$X4[which(networksubset$X3 == "made")])) == sort(as.character(networksubset$X4[which(networksubset$X3 == "received")]))))
 }
 
 ########################
@@ -373,11 +450,7 @@ teamperfPO$Density.diff = teamperfPO$Density.x - teamperfPO$Density.y
 
 ########################
 
-nbadata$z_NBAeff <- ave(nbadata$NBAeff, nbadata$PLAYER_NAME, FUN=scale)
 
-nbadata$z_PIE <- ave(nbadata$PIE, nbadata$PLAYER_NAME, FUN=scale)
-
-########################
 
 
 
